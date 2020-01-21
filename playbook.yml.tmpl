@@ -1,0 +1,26 @@
+
+- name: Deploying Ansible Playbook
+  hosts: all
+
+  vars:
+    instance: %instance%
+
+  tasks:
+
+    - name: Set Hostname
+      command: hostnamectl set-hostname ansible{{ instance }}
+
+    - name: Copy generated hosts file
+      copy:
+        src: ./hosts.tmp
+        dest: /etc/hosts
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Install base packages
+      package:
+        name:
+          - bash_completion
+          - vim
+
