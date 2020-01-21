@@ -1,5 +1,8 @@
 # terraform-ansible-lab-environment
-Deploy Ansible lab environment using Terraform and Ansible. If you want to test your Playbooks using a clean lab environment, this is a nice way to do so. It will build one Ansible management and four target VM's. After testing you can destroy it with one command.
+Deploy Ansible lab environment using Terraform and Ansible. If you want to 
+test your Playbooks using a clean lab environment, this is a nice way to do so. 
+It will build one Ansible management and four target VM's. After testing you 
+can destroy it with one command.
 
 Requirements
 ------------
@@ -17,7 +20,7 @@ Template Image
 Create a template VM image with SSH deamon running.
 Make sure the libvirt image is in place with the public key of the main host.
 This way Ansible can start the playbook once the SSH port of the VM is up.
-Edit the docker.tf file and set the source.
+Edit the ansible.tf file and set the source.
 
 Default source in ansible.tf is:
 
