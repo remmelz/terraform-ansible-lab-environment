@@ -1,4 +1,4 @@
-# terraform-ansible-lab-practice
+# terraform-ansible-lab-environment
 Deploy Ansible lab environment using Terraform and Ansible. If you want to test your Playbooks using a clean lab environment, this is a nice way to do so. It will build one Ansible management and four target VM's. After testing you can destroy it with one command.
 
 Requirements
