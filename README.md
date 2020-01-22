@@ -9,10 +9,11 @@ Requirements
 
 Any pre-requisites that is needed for a successful deployment.
 
- - Terraform
- - Libvirt
-   - Passwordless login to a CentOS VM template
- - Netcat (for detecting SSH port)
+ - Terraform with [libvirt](https://github.com/dmacvicar/terraform-provider-libvirt) provider
+ - Ansible
+ - Libvirt with KVM
+ - Base CentOS (or other Linux OS) template with passwordless root access
+ - Netcat for detecting the SSH port
 
 Template Image
 --------------
