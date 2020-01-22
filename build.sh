@@ -19,12 +19,17 @@ export LIBVIRT_DEFAULT_URI
 function _showhelp() {
     echo "Usage:"
     echo 
-    echo "  apply | destroy" 
+    echo "  $0 apply | destroy" 
     echo
     echo "  -a            Apply builds or changes infrastructure"
     echo "  -d            Destroy Terraform-managed infrastructure"
     echo "  -n <iprange>  When building, detect new host in this IP range (default 192.168.)"
+    echo
     exit 1
+}
+
+function _tf_init() {
+  terraform init
 }
 
 function _tf_apply() {
@@ -36,7 +41,7 @@ function _tf_destroy() {
 }
 
 function _ansible_run() {
-  ansible-playbook -i "${IPADDR}," playbook.yml
+  ansible-playbook -i "${IPADDR}," ./.cache/playbook.yml
 }
 
 function _tf_count() {
@@ -75,6 +80,8 @@ fi
 # Provision Virtual Machine
 ################################################
 
+mkdir -v ./.cache
+
 if [[ ${ACTION} != "apply" ]]; then
   _showhelp
 fi
@@ -90,7 +97,7 @@ while [[ ${C} -lt 30 ]]; do
   if [[ ${IPCOUNT} -eq `_tf_count` ]]; then
     grep ${NETWORK} terraform.tfstate \
       | sed 's/ //g' | sed 's/"//g' \
-      | sort -u > iplist.tmp
+      | sort -u > ./.cache/iplist
     break
   fi
 
@@ -100,7 +107,7 @@ while [[ ${C} -lt 30 ]]; do
   let C=${C}+1
 done
 
-if [[ ! -f iplist.tmp ]]; then
+if [[ ! -f ./.cache/iplist ]]; then
   echo "No IP addresses retrieved. Something went wrong..."
   _tf_destroy
   exit 1
@@ -113,7 +120,7 @@ fi
 echo "Waiting for SSH connectivity:"
 while true; do
   C=0
-  for IP in `cat iplist.tmp`; do
+  for IP in `cat ./.cache/iplist`; do
     nc -w1 -z ${IP} 22
     if [[ $? == 0 ]]; then 
       printf "+"
@@ -121,6 +128,7 @@ while true; do
     else
       printf "-"
     fi
+    sleep 0.5
   done
   [[ ${C} -eq ${IPCOUNT} ]] && break
 done
@@ -129,13 +137,14 @@ done
 # Generate hosts file
 ################################################
 
+echo
 echo "Generating hosts file."
-echo "127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4" >  hosts.tmp
-echo "::1         localhost localhost.localdomain localhost6 localhost6.localdomain6" >> hosts.tmp
+echo "127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4" >  ./.cache/hosts
+echo "::1         localhost localhost.localdomain localhost6 localhost6.localdomain6" >> ./.cache/hosts
 
 C=1
-for IPADDR in `cat iplist.tmp`; do
-  echo "${IPADDR} ansible${C}.homelab.local" >> hosts.tmp
+for IPADDR in `cat ./.cache/iplist`; do
+  echo "${IPADDR} ansible${C}.homelab.local" >> ./.cache/hosts
   let C=${C}+1
 done
 
@@ -144,24 +153,24 @@ done
 ################################################
 
 C=1
-for IPADDR in `cat iplist.tmp`; do
+for IPADDR in `cat ./.cache/iplist`; do
 
-  cat playbook.yml.tmpl \
-    | sed "s/%instance%/${C}/" > playbook.yml
+  cat ./playbooks/base.tmpl \
+    | sed "s/%instance%/${C}/" > ./.cache/playbook.yml
 
   if [[ $C -eq 1 ]]; then
-    echo                                  >> playbook.yml
-    echo "    - name: Installing Ansible" >> playbook.yml
-    echo "      package:"                 >> playbook.yml
-    echo "        name: ansible"          >> playbook.yml
-    echo "        state: present"         >> playbook.yml
+    cat ./playbooks/mngt.tmpl >> ./.cache/playbook.yml
+    _ansible_run
+  else
+    cat ./playbooks/auth.tmpl >> ./.cache/playbook.yml
+    _ansible_run
   fi
 
-  _ansible_run
   let C=${C}+1
 done
 
-rm -v hosts.tmp playbook.yml iplist.tmp
+# Remove cache files
+rm -rf ./.cache
 
 exit
 

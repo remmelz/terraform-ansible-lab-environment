@@ -1,0 +1,17 @@
+
+    - name: Installing Ansible
+      package:
+        name: ansible
+        state: present
+
+    - name: Generate SSH Public-Private Key
+      shell: | 
+        rm -f /root/.ssh/id_rsa 
+        ssh-keygen -t rsa -f /root/.ssh/id_rsa -P ""
+
+    - name: Fetch SSH Public key to Localhost
+      fetch:
+        src: /root/.ssh/id_rsa.pub
+        dest: ./id_rsa.pub.tmp
+        flat: yes  
+

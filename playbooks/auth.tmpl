@@ -1,0 +1,9 @@
+
+    - name: Set authorized keys from Ansible management host
+      authorized_key:
+        user: root
+        state: present
+        key: '{{ item }}'
+      with_file:
+        - ./id_rsa.pub.tmp
+
