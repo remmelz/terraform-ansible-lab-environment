@@ -29,7 +29,7 @@ function _showhelp() {
 }
 
 function _tf_init() {
-  terraform init
+  [[ ! -d .terraform ]] && terraform init 
 }
 
 function _tf_apply() {
@@ -41,7 +41,7 @@ function _tf_destroy() {
 }
 
 function _ansible_run() {
-  ansible-playbook -i "${IPADDR}," ./.cache/playbook.yml
+  ansible-playbook -i "${IPADDR}," playbook.yml
 }
 
 function _tf_count() {
@@ -80,11 +80,12 @@ fi
 # Provision Virtual Machine
 ################################################
 
-mkdir -v ./.cache
-
 if [[ ${ACTION} != "apply" ]]; then
   _showhelp
 fi
+
+mkdir -v ./.cache
+_tf_init
 
 C=1
 while [[ ${C} -lt 30 ]]; do
@@ -101,7 +102,7 @@ while [[ ${C} -lt 30 ]]; do
     break
   fi
 
-  echo "Retrieving IP addresses, trying again in 5 sec...."
+  echo "Retrieving IP addresses..."
   sleep 5
 
   let C=${C}+1
@@ -156,21 +157,32 @@ C=1
 for IPADDR in `cat ./.cache/iplist`; do
 
   cat ./playbooks/base.tmpl \
-    | sed "s/%instance%/${C}/" > ./.cache/playbook.yml
+    | sed "s/%instance%/${C}/" > ./playbook.yml
 
   if [[ $C -eq 1 ]]; then
-    cat ./playbooks/mngt.tmpl >> ./.cache/playbook.yml
+    cat ./playbooks/mngt.tmpl >> ./playbook.yml
     _ansible_run
   else
-    cat ./playbooks/auth.tmpl >> ./.cache/playbook.yml
+    cat ./playbooks/auth.tmpl >> ./playbook.yml
     _ansible_run
   fi
 
   let C=${C}+1
 done
 
+################################################
+# Final Message
+################################################
+
+MNGT=`cat ./.cache/iplist | head -1`
+
+echo '#######################################################' 
+echo "# Now login with command: ssh root@${MNGT}"
+echo '#######################################################' 
+echo
+
 # Remove cache files
-rm -rf ./.cache
+rm -rf ./.cache ./playbook.yml
 
 exit
 

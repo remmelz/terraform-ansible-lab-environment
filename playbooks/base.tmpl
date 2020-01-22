@@ -12,7 +12,7 @@
 
     - name: Copy generated hosts file
       copy:
-        src: ./hosts.tmp
+        src: ./.cache/hosts
         dest: /etc/hosts
         owner: root
         group: root
