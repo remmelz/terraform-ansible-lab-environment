@@ -27,6 +27,17 @@ Default source in ansible.tf is:
 
     source = "/var/lib/libvirt/images/CentOS-7.x86_64-kvm-and-xen.qcow2"
 
+Tip: Keep the size of the template image as small as possible:
+
+    dd if=/dev/zero of=/root/zero status=progress bs=4M
+    rm -f /root/zero
+    shutdown -h now
+
+Then convert the qcow2 image using the following command:
+
+    kvm-img convert -O qcow2 original_image.qcow2 new_image.qcow2
+
+
 Example
 -------
 
