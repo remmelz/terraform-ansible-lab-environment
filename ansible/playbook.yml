@@ -1,0 +1,114 @@
+
+---
+
+#################################
+# All Ansible hosts
+#################################
+#
+- hosts: all
+
+  tasks:
+
+  - name: Setting Hostname
+    command: hostnamectl set-hostname {{inventory_hostname}}
+
+  - name: Installing base packages
+    package:
+      name:
+        - bash-completion
+        - vim
+      state: present
+
+  - name: Copying generated hosts file
+    copy:
+      src: ./hosts
+      dest: /etc/hosts
+      owner: root
+      group: root
+      mode: '0644'
+
+#################################
+# Ansible management
+#################################
+
+- hosts: mngt
+
+  tasks:
+
+  - name: Installing Ansible on management host
+    package:
+      name:
+        - git
+        - ansible
+        - ansible-doc
+      state: present
+
+  - name: Creating ansible user on management host
+    user:
+      name: ansible
+      generate_ssh_key: yes
+      ssh_key_bits: 2048
+      ssh_key_file: .ssh/id_rsa
+
+  - name: Fetching SSH Public key to Localhost
+    fetch:
+      src: /home/ansible/.ssh/id_rsa.pub
+      dest: ./id_rsa.pub
+      flat: yes
+
+  - name: Copying ansible.cfg file to management host
+    copy:
+      src: ./ansible.cfg
+      dest: /home/ansible/ansible.cfg
+      owner: ansible
+      group: ansible
+      mode: '0644'
+
+  - name: Copying inventory file to management host
+    copy:
+      src: ./.cache/inventory
+      dest: /home/ansible/inventory.ini
+      owner: ansible
+      group: ansible
+      mode: '0644'
+
+  - name: Copying ping test script to management host
+    copy:
+      dest: /home/ansible/ping_test.sh
+      content: |
+        ansible -m ping -i inventory.ini cli
+      owner: ansible
+      group: ansible
+      mode: '0755'
+
+
+#################################
+# Ansible clients
+#################################
+
+- hosts: cli
+
+  tasks:
+
+  - name: Copying authorized keys from management host
+    authorized_key:
+      user: root
+      state: present
+      key: '{{ item }}'
+    with_file:
+      - ./.cache/id_rsa.pub
+
+
+#################################
+# Ansible management
+#################################
+
+- hosts: mngt
+
+  tasks:
+
+  - name: Testing Ansible connectivity
+    debug:
+      msg: "ssh root@{{ansible_default_ipv4['address']}} 'su - ansible -c ./ping_test.sh'"
+
+
