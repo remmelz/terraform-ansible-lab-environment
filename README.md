@@ -17,13 +17,13 @@ Any pre-requisites that is needed for a successful deployment.
  - Base CentOS (or other Linux OS) template with passwordless root access
  - Netcat for detecting the SSH port
 
-Template Image
---------------
+Creating a Template Image
+--------------------------
 
 Create a template VM image with SSH deamon running.
-Make sure the libvirt image is in place with the public key of the main host.
+Make sure the OS image contains the public key of your main host.
 This way Ansible can start the playbook once the SSH port of the VM is up.
-Edit the resources.tf files and set the source.
+Edit the */resources.tf files and set the source.
 
 Default source in resources.tf is:
 
