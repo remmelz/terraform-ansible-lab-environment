@@ -1,3 +1,5 @@
-.cache/*
-*/.terraform
-*/terraform.tfstate*
+ansible/inventory.ini
+ansible/hosts
+ansible/*.pub
+terraform/*/.terraform
+terraform/*/terraform.tfstate*

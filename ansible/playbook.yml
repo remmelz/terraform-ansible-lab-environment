@@ -4,7 +4,7 @@
 #################################
 # All Ansible hosts
 #################################
-#
+
 - hosts: all
 
   tasks:
@@ -26,6 +26,7 @@
       owner: root
       group: root
       mode: '0644'
+
 
 #################################
 # Ansible management
@@ -66,7 +67,7 @@
 
   - name: Copying inventory file to management host
     copy:
-      src: ./.cache/inventory
+      src: ./inventory.ini
       dest: /home/ansible/inventory.ini
       owner: ansible
       group: ansible
@@ -96,19 +97,6 @@
       state: present
       key: '{{ item }}'
     with_file:
-      - ./.cache/id_rsa.pub
-
-
-#################################
-# Ansible management
-#################################
-
-- hosts: mngt
-
-  tasks:
-
-  - name: Testing Ansible connectivity
-    debug:
-      msg: "ssh root@{{ansible_default_ipv4['address']}} 'su - ansible -c ./ping_test.sh'"
+      - ./id_rsa.pub
 
 

@@ -28,20 +28,16 @@ function getIP {
 which terraform \
       terraform-provider-libvirt \
       ansible \
+      virsh \
       nc > /dev/null
 
 [[ $? != 0 ]] && exit $?
-
-if [[ -d ./.cache ]]; then
-  rm -rf ./.cache
-  [[ $? != 0 ]] && exit $?
-fi
-mkdir -p ./.cache
 
 #####################################################
 # Run Terraform
 #####################################################
 
+cd ./terraform
 for resource in `ls -d */`; do
   [[ -z `ls -1 ${resource} | grep '.tf$'` ]] && continue
   cd ${resource} || exit 1
@@ -54,33 +50,37 @@ for resource in `ls -d */`; do
   terraform apply -auto-approve
   cd ..
 done
-
+cd ..
 [[ $1 == "destroy" ]] && exit
 
 #####################################################
 # Retrieve IP Addresses
 #####################################################
 
-echo 
+cd ./ansible
+rm -f inventory.ini hosts id_rsa.pub
+
+echo
 echo -e "\e[96m[IP Addresses]\e[39m"
 
-echo "127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4" >  ./.cache/hosts
-echo "::1         localhost localhost.localdomain localhost6 localhost6.localdomain6" >> ./.cache/hosts
+echo "127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4" >  hosts
+echo "::1         localhost localhost.localdomain localhost6 localhost6.localdomain6" >> hosts
 
-for resource in `ls -d */`; do
+for resource in `ls -d ../terraform/*/`; do
 
-  [[ -z `ls -1 ${resource} | grep '.tf$'` ]] && continue
+  [[ -z `ls -1 ../terraform/${resource} | grep '.tf$'` ]] && continue
 
+  resource=`basename ${resource}`
   domain=`echo ${resource} | awk -F'-' '{print $1}'`
   group=` echo ${resource} | awk -F'-' '{print $2}' | sed 's|/||g'`
-  amount=`cat ${resource}/*.tf \
+  amount=`cat ../terraform/${resource}/*.tf \
       | sed 's/ //g' \
       | grep '^count=' \
       | sort -u \
       | awk -F'=' '{print $2}'`
 
-  echo >> ./.cache/inventory
-  echo "[${group}]" >> ./.cache/inventory
+  echo >> inventory.ini
+  echo "[${group}]" >> inventory.ini
 
   counter=1
   while [[ ${counter} -le ${amount} ]]; do
@@ -89,11 +89,12 @@ for resource in `ls -d */`; do
       sleep 0.5
     done
     echo -e "${resource}: \e[32m`getIP ${resource}`\e[39m"
-    echo "`getIP ${resource}` ${resource}" >> ./.cache/hosts
-    echo "${resource} ansible_host=`getIP ${resource}`" >> ./.cache/inventory
+    echo "`getIP ${resource}` ${resource}" >> hosts
+    echo "${resource} ansible_host=`getIP ${resource}`" >> inventory.ini
     let counter=${counter}+1
   done
 done
+echo >> inventory.ini
 
 #####################################################
 # Check SSH Daemon running
@@ -113,7 +114,7 @@ while read line; do
     sleep 0.5
   done
   echo -e "\e[32myes\e[39m"
-done < ./.cache/hosts
+done < hosts
 
 #####################################################
 # Provision with Ansible playbook
@@ -121,7 +122,7 @@ done < ./.cache/hosts
 
 echo
 echo -e "\e[96m[Ansible Playbook]\e[39m"
-ansible-playbook -i ./.cache/inventory playbook.yml
+ansible-playbook -i ./inventory.ini playbook.yml
 
 exit $?
 
