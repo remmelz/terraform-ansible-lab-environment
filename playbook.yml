@@ -1,0 +1,92 @@
+
+---
+
+- hosts: all
+
+  tasks:
+
+  - name: Setting Hostname
+    command: hostnamectl set-hostname {{inventory_hostname}}
+
+  - name: Copying generated hosts file
+    copy:
+      src: ./.cache/hosts
+      dest: /etc/hosts
+      owner: root
+      group: root
+      mode: '0644'
+
+  - name: Installing base packages
+    package:
+      name:
+        - bash-completion
+        - vim
+        - git
+      state: present
+
+  - name: Installing Ansible on management host
+    package:
+      name:
+        - ansible
+        - ansible-doc
+      state: present
+    when: "'mngt' in group_names"
+
+  - name: Creating ansible user on management host
+    user:
+      name: ansible
+      generate_ssh_key: yes
+      ssh_key_bits: 2048
+      ssh_key_file: .ssh/id_rsa
+    when: "'mngt' in group_names"
+
+  - name: Fetching SSH Public key to Localhost
+    fetch:
+      src: /home/ansible/.ssh/id_rsa.pub
+      dest: ./.cache/id_rsa.pub
+      flat: yes
+    when: "'mngt' in group_names"
+
+  - name: Copying ansible.cfg file to management host
+    copy:
+      src: ./ansible.cfg
+      dest: /home/ansible/ansible.cfg
+      owner: ansible
+      group: ansible
+      mode: '0644'
+    when: "'mngt' in group_names"
+
+  - name: Copying inventory file to management host
+    copy:
+      src: ./.cache/inventory
+      dest: /home/ansible/inventory.ini
+      owner: ansible
+      group: ansible
+      mode: '0644'
+    when: "'mngt' in group_names"
+
+  - name: Copying ping test script to management host
+    copy:
+      dest: /home/ansible/ping_test.sh
+      content: |
+        ansible -m ping -i inventory.ini cli
+      owner: ansible
+      group: ansible
+      mode: '0755'
+    when: "'mngt' in group_names"
+
+  - name: Copying authorized keys from management host
+    authorized_key:
+      user: root
+      state: present
+      key: '{{ item }}'
+    with_file:
+      - ./.cache/id_rsa.pub
+    when: "'cli' in group_names"
+
+  - name: Testing Ansible connectivity
+    debug:
+      msg: "ssh root@{{ansible_default_ipv4['address']}} 'su - ansible -c ./ping_test.sh'"
+    when: "'mngt' in group_names"
+
+

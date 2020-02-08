@@ -6,8 +6,8 @@ provider "libvirt" {
 
 resource "libvirt_volume" "ansible" {
 
-  count = 5
-  name = "ansible${count.index}.qcow2"
+  count = 1
+  name = "ansible-mngt${count.index +1}.qcow2"
   pool = "default"
   source = "/var/lib/libvirt/images/CentOS-7.x86_64-kvm-and-xen.qcow2"
   format = "qcow2"
@@ -15,8 +15,8 @@ resource "libvirt_volume" "ansible" {
 
 resource "libvirt_domain" "ansible" {
 
-  count  = 5
-  name   = "ansible${count.index}"
+  count  = 1
+  name   = "ansible-mngt${count.index +1}"
   memory = "1024"
   vcpu   = 2
 
@@ -41,11 +41,6 @@ resource "libvirt_domain" "ansible" {
   }
 
 }
-
-output "ipv4" {
-  value = libvirt_domain.ansible.*.network_interface.0.addresses
-}
-
 
 terraform {
   required_version = ">= 0.12"

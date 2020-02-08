@@ -1,188 +1,128 @@
 #!/bin/bash
-#
-# Simple build script
-#
-################################################
-# Default variables
-################################################
 
-NETWORK="192.168."
 LIBVIRT_DEFAULT_URI="qemu:///system"
-ARG=$1
 
-export LIBVIRT_DEFAULT_URI
-
-################################################
+#####################################################
 # Functions
-################################################
+#####################################################
 
-function _showhelp() {
-    echo "Usage:"
-    echo 
-    echo "  $0 apply | destroy" 
-    echo
-    echo "  -a            Apply builds or changes infrastructure"
-    echo "  -d            Destroy Terraform-managed infrastructure"
-    echo "  -n <iprange>  When building, detect new host in this IP range (default 192.168.)"
-    echo
-    exit 1
-}
-
-function _tf_init() {
-  [[ ! -d .terraform ]] && terraform init 
-}
-
-function _tf_apply() {
-  terraform apply -auto-approve
-}
-
-function _tf_destroy() {
-  terraform destroy -auto-approve
-}
-
-function _ansible_run() {
-  ansible-playbook -i "${IPADDR}," playbook.yml
-}
-
-function _tf_count() {
-  count=`cat *.tf | sed 's/ //g' \
-    | grep '^count' | sort -u | cut -d'=' -f2`
-  echo ${count}
-}
-
-################################################
-# Getting options
-################################################
-
-while getopts "adn:i:" OPT; do
-  case ${OPT} in
-    a ) ACTION="apply"     ;;
-    d ) ACTION="destroy"   ;;
-    n ) NETWORK=${OPTARG}  ;;
-    i ) INSTANCE=${OPTARG} ;;
-  esac
-done
-
-[[ $1 == "apply" ]]   && ACTION="apply"
-[[ $1 == "destroy" ]] && ACTION="destroy"
-[[ -z $1 ]]           && _showhelp
-
-################################################
-# Shutdown and remove the environment
-################################################
-
-if [[ ${ACTION} == "destroy" ]]; then
-  _tf_destroy
-  exit $?
-fi
-
-################################################
-# Provision Virtual Machine
-################################################
-
-if [[ ${ACTION} != "apply" ]]; then
-  _showhelp
-fi
-
-mkdir -v ./.cache
-_tf_init
-
-C=1
-while [[ ${C} -lt 30 ]]; do
-
-  _tf_apply
-
-  IPCOUNT=`grep ${NETWORK} terraform.tfstate \
-	  | sed 's/ //g' | sort -u | wc -l`
-
-  if [[ ${IPCOUNT} -eq `_tf_count` ]]; then
-    grep ${NETWORK} terraform.tfstate \
-      | sed 's/ //g' | sed 's/"//g' \
-      | sort -u > ./.cache/iplist
-    break
+function getIP {
+  sleep 0.5
+  resource=$1 ; ipaddr=""
+  macaddr=`virsh dumpxml ${resource} \
+      | grep 'mac address' \
+      | awk -F"'" '{print $2}'`
+  if [[ -n ${macaddr} ]]; then
+    ipaddr=`virsh net-dhcp-leases default \
+        | grep ${macaddr} \
+        | awk -F' ' '{print $5}' \
+        | awk -F'/' '{print $1}'`
   fi
+  echo ${ipaddr}
+}
 
-  echo "Retrieving IP addresses..."
-  sleep 5
+#####################################################
+# Sanity check
+#####################################################
 
-  let C=${C}+1
-done
+which terraform \
+      terraform-provider-libvirt \
+      ansible \
+      nc > /dev/null
 
-if [[ ! -f ./.cache/iplist ]]; then
-  echo "No IP addresses retrieved. Something went wrong..."
-  _tf_destroy
-  exit 1
+[[ $? != 0 ]] && exit $?
+
+if [[ -d ./.cache ]]; then
+  rm -rf ./.cache
+  [[ $? != 0 ]] && exit $?
 fi
+mkdir -p ./.cache
 
-################################################
-# Check if SSH Daemon is running
-################################################
+#####################################################
+# Run Terraform
+#####################################################
 
-echo "Waiting for SSH connectivity:"
-while true; do
-  C=0
-  for IP in `cat ./.cache/iplist`; do
-    nc -w1 -z ${IP} 22
-    if [[ $? == 0 ]]; then 
-      printf "+"
-      let C=$C+1
-    else
-      printf "-"
-    fi
-    sleep 0.5
-  done
-  [[ ${C} -eq ${IPCOUNT} ]] && break
+for resource in `ls -d */`; do
+  [[ -z `ls -1 ${resource} | grep '.tf$'` ]] && continue
+  cd ${resource} || exit 1
+  if  [[ $1 == "destroy" ]]; then
+    terraform destroy -auto-approve
+    cd ..
+    continue
+  fi
+  terraform init
+  terraform apply -auto-approve
+  cd ..
 done
 
-################################################
-# Generate hosts file
-################################################
+[[ $1 == "destroy" ]] && exit
 
-echo
-echo "Generating hosts file."
+#####################################################
+# Retrieve IP Addresses
+#####################################################
+
+echo 
+echo -e "\e[96m[IP Addresses]\e[39m"
+
 echo "127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4" >  ./.cache/hosts
 echo "::1         localhost localhost.localdomain localhost6 localhost6.localdomain6" >> ./.cache/hosts
 
-C=1
-for IPADDR in `cat ./.cache/iplist`; do
-  echo "${IPADDR} ansible${C}.homelab.local" >> ./.cache/hosts
-  let C=${C}+1
+for resource in `ls -d */`; do
+
+  [[ -z `ls -1 ${resource} | grep '.tf$'` ]] && continue
+
+  domain=`echo ${resource} | awk -F'-' '{print $1}'`
+  group=` echo ${resource} | awk -F'-' '{print $2}' | sed 's|/||g'`
+  amount=`cat ${resource}/*.tf \
+      | sed 's/ //g' \
+      | grep '^count=' \
+      | sort -u \
+      | awk -F'=' '{print $2}'`
+
+  echo >> ./.cache/inventory
+  echo "[${group}]" >> ./.cache/inventory
+
+  counter=1
+  while [[ ${counter} -le ${amount} ]]; do
+    resource=${domain}-${group}${counter}
+    while [[ -z `getIP ${resource}` ]]; do
+      sleep 0.5
+    done
+    echo -e "${resource}: \e[32m`getIP ${resource}`\e[39m"
+    echo "`getIP ${resource}` ${resource}" >> ./.cache/hosts
+    echo "${resource} ansible_host=`getIP ${resource}`" >> ./.cache/inventory
+    let counter=${counter}+1
+  done
 done
 
-################################################
-# Provision Applications
-################################################
+#####################################################
+# Check SSH Daemon running
+#####################################################
 
-C=1
-for IPADDR in `cat ./.cache/iplist`; do
-
-  cat ./playbooks/base.tmpl \
-    | sed "s/%instance%/${C}/" > ./playbook.yml
-
-  if [[ $C -eq 1 ]]; then
-    cat ./playbooks/mngt.tmpl >> ./playbook.yml
-    _ansible_run
-  else
-    cat ./playbooks/auth.tmpl >> ./playbook.yml
-    _ansible_run
-  fi
-
-  let C=${C}+1
-done
-
-################################################
-# Final Message
-################################################
-
-MNGT=`cat ./.cache/iplist | head -1`
-
-echo '#######################################################' 
-echo "# Now login with command: ssh root@${MNGT}"
-echo '#######################################################' 
 echo
+echo -e "\e[96m[SSH Daemon]\e[39m"
 
-# Remove cache files
-rm -rf ./.cache ./playbook.yml
+while read line; do
+  [[ -n `echo ${line} | grep localhost` ]] && continue
+  ipaddr=`echo ${line} | cut -d' ' -f1`
+  host=`  echo ${line} | cut -d' ' -f2`
+  printf "${host} ${ipaddr} sshd_running: "
+  while true; do
+    nc -w1 -z ${ipaddr} 22
+    [[ $? == 0 ]] && break
+    sleep 0.5
+  done
+  echo -e "\e[32myes\e[39m"
+done < ./.cache/hosts
 
-exit
+#####################################################
+# Provision with Ansible playbook
+#####################################################
+
+echo
+echo -e "\e[96m[Ansible Playbook]\e[39m"
+ansible-playbook -i ./.cache/inventory playbook.yml
+
+exit $?
+
 
