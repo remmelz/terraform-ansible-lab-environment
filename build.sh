@@ -37,7 +37,7 @@ which terraform \
 # Run Terraform
 #####################################################
 
-cd ./terraform
+cd ./terraform || exit 1
 for resource in `ls -d */`; do
   [[ -z `ls -1 ${resource} | grep '.tf$'` ]] && continue
   cd ${resource} || exit 1
@@ -57,7 +57,7 @@ cd ..
 # Retrieve IP Addresses
 #####################################################
 
-cd ./ansible
+cd ./ansible || exit 1
 rm -f inventory.ini hosts id_rsa.pub
 
 echo
